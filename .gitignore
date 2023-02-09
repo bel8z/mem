@@ -1,2 +1,9 @@
+# Zig stuff
 /zig-cache
 /zig-out
+
+# VS stuff
+/.vs
+/*.filters
+/*.user
+/build
