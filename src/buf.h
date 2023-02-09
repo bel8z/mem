@@ -1,41 +1,36 @@
+//=================================================================================================
+// Interface
+//=================================================================================================
 #if !defined(BUF_DECL)
-#    include <stdbool.h>
-#    include <stddef.h>
-#    include <stdint.h>
 
-#    if !defined(BUF_ASSERT)
-#        include "assert.h"
-#        define BUF_ASSERT assert
-#    endif
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#    if !defined(BUF_ASSERT_MSG)
-#        define BUF_ASSERT_MSG(cond, msg) BUF_ASSERT((cond) && (msg))
-#    endif
+#define BUF_ALIGNOF _Alignof
 
-#    define BUF_ALIGNOF _Alignof
+#define Span(T)     \
+    struct          \
+    {               \
+        T *ptr;     \
+        size_t len; \
+    }
 
-#    define Span(T)     \
-        struct          \
-        {               \
-            T *ptr;     \
-            size_t len; \
-        }
+#define Buf(T)      \
+    struct          \
+    {               \
+        Span(T);    \
+        size_t cap; \
+    }
 
-#    define Buf(T)      \
-        struct          \
-        {               \
-            Span(T);    \
-            size_t cap; \
-        }
-
-#    pragma warning(push)
-#    pragma warning(disable : 4201)
+#pragma warning(push)
+#pragma warning(disable : 4201)
 typedef struct MemArena
 {
     Buf(uint8_t);
     size_t commit;
 } MemArena;
-#    pragma warning(pop)
+#pragma warning(pop)
 
 MemArena memReserve(size_t capacity);
 MemArena *memBootstrap(size_t total_size);
@@ -44,8 +39,8 @@ bool memRelease(MemArena *mem);
 void memClear(MemArena *mem);
 void memDecommitExcess(MemArena *mem);
 
-#    define memAlloc(T, arena, count) memAllocEx(arena, count * sizeof(T), BUF_ALIGNOF(T))
-#    define memAllocEx(arena, size, alignment) memReallocEx(arena, 0, 0, size, alignment)
+#define memAlloc(T, arena, count) memAllocEx(arena, count * sizeof(T), BUF_ALIGNOF(T))
+#define memAllocEx(arena, size, alignment) memReallocEx(arena, 0, 0, size, alignment)
 
 void *memReallocEx(MemArena *mem, void *old_ptr, size_t old_size, size_t new_size,
                    size_t alignment);
@@ -53,37 +48,45 @@ void *memReallocEx(MemArena *mem, void *old_ptr, size_t old_size, size_t new_siz
 /// Round an address down to the previous (or current) aligned address.
 /// The alignment must be a power of 2 and greater than 0.
 size_t memAlignBackward(size_t addr, size_t alignment);
+
 /// Round an address up to the next (or current) aligned address.
 /// The alignment must be a power of 2 and greater than 0.
-/// Asserts that rounding up the address does not cause integer overflow.
 size_t memAlignForward(size_t addr, size_t alignment);
 
-#    define bufPush(buf, item, mem) \
-        (bufReserveCap(buf, 1, mem) ? ((buf)->ptr[(buf)->len++] = (item), true) : false)
+#define bufPush(buf, item, mem) \
+    (bufReserveCap(buf, 1, mem) ? ((buf)->ptr[(buf)->len++] = (item), true) : false)
 
 /// Reserve the given amount of capacity
-#    define bufReserveCap(buf, amount, mem) bufEnsureCap(buf, (buf)->len + amount, mem)
+#define bufReserveCap(buf, amount, mem) bufEnsureCap(buf, (buf)->len + amount, mem)
 
 /// Ensure the given total amount of capacity
-#    define bufEnsureCap(buf, total, mem) \
-        bufRealloc(&(buf)->ptr, &(buf)->cap, total, sizeof(*(buf)->ptr), mem)
+#define bufEnsureCap(buf, total, mem) \
+    bufRealloc(&(buf)->ptr, &(buf)->cap, total, sizeof(*(buf)->ptr), mem)
 
 bool bufRealloc(void **buf_ptr, size_t *cap_ptr, size_t req_cap, size_t item_size, MemArena *mem);
 
-#    define BUF_DECL
+#define BUF_DECL
 #endif
 
+//=================================================================================================
+// Implementation
+//=================================================================================================
 #if defined(BUF_IMPL)
 
-#    include <string.h>
+#include <string.h>
 
-#    define PAGE_SIZE 4096
+#if !defined(BUF_MAX_ALIGNMENT)
+#define BUF_MAX_ALIGNMENT 16
+#endif
 
-#    define IS_POW2(v) ((v) && 0 == ((v) & ((v)-1)))
+#if !defined(BUF_ASSERT)
+#include "assert.h"
+#define BUF_ASSERT assert
+#endif
 
-#    if !defined(MAX_ALIGNMENT)
-#        define MAX_ALIGNMENT 16
-#    endif
+#if !defined(BUF_ASSERT_MSG)
+#define BUF_ASSERT_MSG(cond, msg) BUF_ASSERT((cond) && (msg))
+#endif
 
 static void memCommit(MemArena *mem);
 
@@ -114,22 +117,19 @@ ceilPowerOf2_64(uint64_t v)
     return v;
 }
 
-#    define ceilPowerOf2(x) _Generic(x, uint32_t : ceilPowerOf2_32, default : ceilPowerOf2_64)(x)
+#define ceilPowerOf2(x) _Generic(x, uint32_t : ceilPowerOf2_32, default : ceilPowerOf2_64)(x)
 
-/// Round an address down to the previous (or current) aligned address.
-/// The alignment must be a power of 2 and greater than 0.
 size_t
 memAlignBackward(size_t addr, size_t alignment)
 {
-    BUF_ASSERT_MSG(IS_POW2(alignment), "Alignment must be a power of 2");
+    BUF_ASSERT_MSG(alignment > 0, "Alignment must be > 0");
+    BUF_ASSERT_MSG(!(alignment & (alignment - 1)), "Alignment must be a power of 2");
     // 000010000 // example alignment
     // 000001111 // subtract 1
     // 111110000 // binary not
     return addr & ~(alignment - 1);
 }
-/// Round an address up to the next (or current) aligned address.
-/// The alignment must be a power of 2 and greater than 0.
-/// Asserts that rounding up the address does not cause integer overflow.
+
 size_t
 memAlignForward(size_t addr, size_t alignment)
 {
@@ -144,7 +144,8 @@ memClear(MemArena *mem)
 
 static bool
 isLastAlloc(MemArena const *mem, uint8_t const *ptr, size_t size)
-{
+{  
+   if (!ptr) return false; 
     uint8_t const *arena_end = mem->ptr + mem->len;
     uint8_t const *alloc_end = ptr + size;
     return (arena_end == alloc_end);
@@ -153,6 +154,7 @@ isLastAlloc(MemArena const *mem, uint8_t const *ptr, size_t size)
 void *
 memReallocEx(MemArena *mem, void *old_ptr, size_t old_size, size_t new_size, size_t alignment)
 {
+    BUF_ASSERT(mem);
     BUF_ASSERT_MSG(old_ptr == 0 || old_size != 0, "Inconsistent old memory state");
     BUF_ASSERT_MSG(new_size != 0 || old_ptr != 0, "Incoherent new memory request");
 
@@ -183,11 +185,11 @@ memReallocEx(MemArena *mem, void *old_ptr, size_t old_size, size_t new_size, siz
         new_ptr = mem->ptr + offset;
         mem->len = offset + new_size;
         memCommit(mem);
-        // Make sure to preserve the data if the memory is reallocated
+        // make sure to preserve the data if the memory is reallocated
         if (old_ptr) memcpy(new_ptr, old_ptr, new_size);
     }
 
-    return new_ptr;
+    return new_ptr; 
 }
 
 bool
@@ -203,8 +205,9 @@ bufRealloc(void **buf_ptr, size_t *cap_ptr, size_t req_cap, size_t item_size, Me
     // TODO (Matteo): Improve?
     // Try to deduce a correct alignment from the item size withour requiring it (this allows
     // for a less cluttered API)
-    size_t item_align = (item_size > MAX_ALIGNMENT) ? MAX_ALIGNMENT : ceilPowerOf2(item_size);
-    BUF_ASSERT(item_align <= MAX_ALIGNMENT);
+    size_t item_align =
+        (item_size > BUF_MAX_ALIGNMENT) ? BUF_MAX_ALIGNMENT : ceilPowerOf2(item_size);
+    BUF_ASSERT(item_align <= BUF_MAX_ALIGNMENT);
 
     void *new_buf =
         memReallocEx(mem, *buf_ptr, cur_cap * item_size, new_capacity * item_size, item_align);
@@ -215,12 +218,16 @@ bufRealloc(void **buf_ptr, size_t *cap_ptr, size_t req_cap, size_t item_size, Me
     return true;
 }
 
-#    pragma warning(push)
-#    pragma warning(disable : 5105)
-#    define WIN32_LEAN_AND_MEAN
-#    define NOMINMAX
-#    include <Windows.h>
-#    pragma warning(pop)
+// NOTE (Matteo): Windows only for now, sorry
+
+#pragma warning(push)
+#pragma warning(disable : 5105)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <Windows.h>
+#pragma warning(pop)
+
+#define PAGE_SIZE 4096
 
 MemArena
 memReserve(size_t capacity)
