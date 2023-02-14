@@ -42,6 +42,8 @@ void memDecommitExcess(MemArena *mem);
 #define memAlloc(T, arena, count) memAllocEx(arena, count * sizeof(T), BUF_ALIGNOF(T))
 #define memAllocEx(arena, size, alignment) memReallocEx(arena, 0, 0, size, alignment)
 
+/// (Re)allocate memory from the given arena. The returned pointer can be equal to the 'old' one if
+/// the reallocation is performed in-place, and is NULL if allocation fails.
 void *memReallocEx(MemArena *mem, void *old_ptr, size_t old_size, size_t new_size,
                    size_t alignment);
 
@@ -53,17 +55,44 @@ size_t memAlignBackward(size_t addr, size_t alignment);
 /// The alignment must be a power of 2 and greater than 0.
 size_t memAlignForward(size_t addr, size_t alignment);
 
+/// Ensure the given generic buffer have the required capacity, by reallocating it if necessary
+/// Returns 'true' if the operation succeeds.
+/// The 'mem' parameter can be left to NULL; in that case no allocation is performed, but the
+/// operation may still succeed if the buffer has enough capacity
+/// This is the foundational API for growing buffers
+bool bufRealloc(void **buf_ptr, size_t *cap_ptr, size_t req_cap, size_t item_size, MemArena *mem);
+
+/// Ensure the given total amount of capacity; return 'true' on success.
+#define bufEnsureCap(buf, total, mem) \
+    bufRealloc((void **)(&(buf)->ptr), &(buf)->cap, total, sizeof(*(buf)->ptr), mem)
+
+/// Reserve the given amount of capacity; return 'true' on success.
+#define bufReserveCap(buf, amount, mem) bufEnsureCap(buf, (buf)->len + amount, mem)
+
+/// Push an item at the end of the buffer if enough memory is available; return 'true' on success.
 #define bufPush(buf, item, mem) \
     (bufReserveCap(buf, 1, mem) ? ((buf)->ptr[(buf)->len++] = (item), true) : false)
 
-/// Reserve the given amount of capacity
-#define bufReserveCap(buf, amount, mem) bufEnsureCap(buf, (buf)->len + amount, mem)
+/// Increase the length (# of contained items) of the buffer by 'amount'
+#define bufExtend(buf, amount, mem) \
+    (bufReserveCap(buf, amount, mem) ? ((buf)->len += amount, true) : false)
 
-/// Ensure the given total amount of capacity
-#define bufEnsureCap(buf, total, mem) \
-    bufRealloc(&(buf)->ptr, &(buf)->cap, total, sizeof(*(buf)->ptr), mem)
+/// Sets the 'total' length (# of contained items) of the buffer
+#define bufResize(buf, total, mem) \
+    (bufEnsureCap(buf, total, mem) ? ((buf)->len = total, true) : false)
 
-bool bufRealloc(void **buf_ptr, size_t *cap_ptr, size_t req_cap, size_t item_size, MemArena *mem);
+/// Insert the given element at the given position in the buffer, if the capacity allows for it
+#define bufInsert(buf, item, at, mem)                                                         \
+    ((at) <= (buf)->len && bufExtend(buf, 1, mem)                                             \
+         ? (bufMove(buf, (at), 1 + (at), (buf)->len - 1 - (at)), (buf)->ptr[at] = item, true) \
+         : false)
+
+#define bufSwapRemove(buf, pos) ((pos) < (buf.len))
+
+#define bufMove(buf, from, to, count) \
+    memmove((buf)->ptr + (to), (buf)->ptr + (from), sizeof(*(buf)->ptr) * (count))
+
+extern void *memmove(void *dest, const void *src, size_t count);
 
 #define BUF_DECL
 #endif
@@ -144,8 +173,8 @@ memClear(MemArena *mem)
 
 static bool
 isLastAlloc(MemArena const *mem, uint8_t const *ptr, size_t size)
-{  
-   if (!ptr) return false; 
+{
+    if (!ptr) return false;
     uint8_t const *arena_end = mem->ptr + mem->len;
     uint8_t const *alloc_end = ptr + size;
     return (arena_end == alloc_end);
@@ -189,7 +218,7 @@ memReallocEx(MemArena *mem, void *old_ptr, size_t old_size, size_t new_size, siz
         if (old_ptr) memcpy(new_ptr, old_ptr, new_size);
     }
 
-    return new_ptr; 
+    return new_ptr;
 }
 
 bool
