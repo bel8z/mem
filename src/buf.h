@@ -55,6 +55,10 @@ size_t memAlignBackward(size_t addr, size_t alignment);
 /// The alignment must be a power of 2 and greater than 0.
 size_t memAlignForward(size_t addr, size_t alignment);
 
+/// Move 'count' bytes of memory between the given location (basically memmove without
+/// depending explicitly on the stdlib)
+void memMove(void const *from, void *to, size_t count);
+
 /// Ensure the given generic buffer have the required capacity, by reallocating it if necessary
 /// Returns 'true' if the operation succeeds.
 /// The 'mem' parameter can be left to NULL; in that case no allocation is performed, but the
@@ -63,36 +67,24 @@ size_t memAlignForward(size_t addr, size_t alignment);
 bool bufRealloc(void **buf_ptr, size_t *cap_ptr, size_t req_cap, size_t item_size, MemArena *mem);
 
 /// Ensure the given total amount of capacity; return 'true' on success.
-#define bufEnsureCap(buf, total, mem) \
+#define bufEnsure(buf, total, mem) \
     bufRealloc((void **)(&(buf)->ptr), &(buf)->cap, total, sizeof(*(buf)->ptr), mem)
 
 /// Reserve the given amount of capacity; return 'true' on success.
-#define bufReserveCap(buf, amount, mem) bufEnsureCap(buf, (buf)->len + amount, mem)
+#define bufReserve(buf, amount, mem) bufEnsure(buf, (buf)->len + amount, mem)
 
-/// Push an item at the end of the buffer if enough memory is available; return 'true' on success.
-#define bufPush(buf, item, mem) \
-    (bufReserveCap(buf, 1, mem) ? ((buf)->ptr[(buf)->len++] = (item), true) : false)
-
-/// Increase the length (# of contained items) of the buffer by 'amount'
-#define bufExtend(buf, amount, mem) \
-    (bufReserveCap(buf, amount, mem) ? ((buf)->len += amount, true) : false)
-
-/// Sets the 'total' length (# of contained items) of the buffer
-#define bufResize(buf, total, mem) \
-    (bufEnsureCap(buf, total, mem) ? ((buf)->len = total, true) : false)
+/// Reserve the given amount of capacity; return 'true' on success.
+#define bufReserveOne(buf, mem) bufEnsure(buf, (buf)->len + 1, mem)
 
 /// Insert the given element at the given position in the buffer, if the capacity allows for it
 #define bufInsert(buf, item, at, mem)                                                         \
-    ((at) <= (buf)->len && bufExtend(buf, 1, mem)                                             \
-         ? (bufMove(buf, (at), 1 + (at), (buf)->len - 1 - (at)), (buf)->ptr[at] = item, true) \
+    (at <= (buf)->len && bufReserveOne(buf, mem)                                              \
+         ? (bufMove(buf, at, (at) + 1, ++(buf)->len - 1 + (at)), (buf)->ptr[at] = item, true) \
          : false)
 
-#define bufSwapRemove(buf, pos) ((pos) < (buf.len))
-
+/// Insert the given element at the given position in the buffer, if the capacity allows for it
 #define bufMove(buf, from, to, count) \
-    memmove((buf)->ptr + (to), (buf)->ptr + (from), sizeof(*(buf)->ptr) * (count))
-
-extern void *memmove(void *dest, const void *src, size_t count);
+    memMove((buf)->ptr + (from), (buf)->ptr + (to), sizeof(*(buf)->ptr) * (count))
 
 #define BUF_DECL
 #endif
@@ -163,6 +155,12 @@ size_t
 memAlignForward(size_t addr, size_t alignment)
 {
     return memAlignBackward(addr + (alignment - 1), alignment);
+}
+
+void
+memMove(void const *from, void *to, size_t count)
+{
+    memmove(to, from, count);
 }
 
 void

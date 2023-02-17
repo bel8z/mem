@@ -22,7 +22,9 @@ main(void)
 
     for (int32_t i = 0; i < 10; ++i)
     {
-        assert(bufPush(&buf, i, mem));
+        // Push
+        assert(bufReserveOne(&buf, mem));
+        buf.ptr[buf.len++] = i;
     }
 
     assert(buf.len == 10);
