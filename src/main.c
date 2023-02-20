@@ -1,9 +1,9 @@
 #include <assert.h>
 #include <stdio.h>
 
-#define BUF_ASSERT assert
-#define BUF_IMPL
-#include "buf.h"
+#define MEM_ASSERT assert
+#define MEM_IMPL
+#include "mem.h"
 
 #pragma warning(disable : 4201)
 
@@ -13,17 +13,17 @@ main(void)
     MemArena *mem = memBootstrap(1024 * 1024 * 1024);
     assert(mem && "Reserve failed");
 
-    Span(uint32_t) ints = {.len = 128};
+    MemSpan(uint32_t) ints = {.len = 128};
     ints.ptr = memAlloc(uint32_t, mem, ints.len);
 
     assert(ints.ptr && "Alloc failed");
 
-    Buf(int32_t) buf = {0};
+    MemBuf(int32_t) buf = {0};
 
     for (int32_t i = 0; i < 10; ++i)
     {
         // Push
-        assert(bufReserveOne(&buf, mem));
+        assert(memBufReserveOne(&buf, mem));
         buf.ptr[buf.len++] = i;
     }
 
@@ -33,7 +33,7 @@ main(void)
         assert(buf.ptr[i] == i);
     }
 
-    assert(bufInsert(&buf, 10, 4, mem));
+    assert(memBufInsert(&buf, 10, 4, mem));
     assert(buf.ptr[4] == 10);
     assert(buf.ptr[5] == 4);
 

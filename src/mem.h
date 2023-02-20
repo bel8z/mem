@@ -1,25 +1,29 @@
 //=================================================================================================
+//
+// Basic memory management and dynamic buffer utilities for C
+//
+//=================================================================================================
 // Interface
 //=================================================================================================
-#if !defined(BUF_DECL)
+#if !defined(MEM_DECL)
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#define BUF_ALIGNOF _Alignof
+#define MEM_ALIGN_OF _Alignof
 
-#define Span(T)     \
+#define MemSpan(T)  \
     struct          \
     {               \
         T *ptr;     \
         size_t len; \
     }
 
-#define Buf(T)      \
+#define MemBuf(T)   \
     struct          \
     {               \
-        Span(T);    \
+        MemSpan(T); \
         size_t cap; \
     }
 
@@ -27,7 +31,7 @@
 #pragma warning(disable : 4201)
 typedef struct MemArena
 {
-    Buf(uint8_t);
+    MemBuf(uint8_t);
     size_t commit;
 } MemArena;
 #pragma warning(pop)
@@ -39,7 +43,7 @@ bool memRelease(MemArena *mem);
 void memClear(MemArena *mem);
 void memDecommitExcess(MemArena *mem);
 
-#define memAlloc(T, arena, count) memAllocEx(arena, count * sizeof(T), BUF_ALIGNOF(T))
+#define memAlloc(T, arena, count) memAllocEx(arena, count * sizeof(T), MEM_ALIGN_OF(T))
 #define memAllocEx(arena, size, alignment) memReallocEx(arena, 0, 0, size, alignment)
 
 /// (Re)allocate memory from the given arena. The returned pointer can be equal to the 'old' one if
@@ -64,49 +68,50 @@ void memMove(void const *from, void *to, size_t count);
 /// The 'mem' parameter can be left to NULL; in that case no allocation is performed, but the
 /// operation may still succeed if the buffer has enough capacity
 /// This is the foundational API for growing buffers
-bool bufRealloc(void **buf_ptr, size_t *cap_ptr, size_t req_cap, size_t item_size, MemArena *mem);
+bool memBufRealloc(void **buf_ptr, size_t *cap_ptr, size_t req_cap, size_t item_size,
+                   MemArena *mem);
 
 /// Ensure the given total amount of capacity; return 'true' on success.
-#define bufEnsure(buf, total, mem) \
-    bufRealloc((void **)(&(buf)->ptr), &(buf)->cap, total, sizeof(*(buf)->ptr), mem)
+#define memBufEnsure(buf, total, mem) \
+    memBufRealloc((void **)(&(buf)->ptr), &(buf)->cap, total, sizeof(*(buf)->ptr), mem)
 
 /// Reserve the given amount of capacity; return 'true' on success.
-#define bufReserve(buf, amount, mem) bufEnsure(buf, (buf)->len + amount, mem)
+#define memBufReserve(buf, amount, mem) memBufEnsure(buf, (buf)->len + amount, mem)
 
 /// Reserve the given amount of capacity; return 'true' on success.
-#define bufReserveOne(buf, mem) bufEnsure(buf, (buf)->len + 1, mem)
+#define memBufReserveOne(buf, mem) memBufEnsure(buf, (buf)->len + 1, mem)
 
 /// Insert the given element at the given position in the buffer, if the capacity allows for it
-#define bufInsert(buf, item, at, mem)                                                         \
-    (at <= (buf)->len && bufReserveOne(buf, mem)                                              \
-         ? (bufMove(buf, at, (at) + 1, ++(buf)->len - 1 + (at)), (buf)->ptr[at] = item, true) \
+#define memBufInsert(buf, item, at, mem)                                                         \
+    (at <= (buf)->len && memBufReserveOne(buf, mem)                                              \
+         ? (memBufMove(buf, at, (at) + 1, ++(buf)->len - 1 + (at)), (buf)->ptr[at] = item, true) \
          : false)
 
-/// Insert the given element at the given position in the buffer, if the capacity allows for it
-#define bufMove(buf, from, to, count) \
+/// Utility macro for moving 'count' items from one location to another inside the buffer
+#define memBufMove(buf, from, to, count) \
     memMove((buf)->ptr + (from), (buf)->ptr + (to), sizeof(*(buf)->ptr) * (count))
 
-#define BUF_DECL
+#define MEM_DECL
 #endif
 
 //=================================================================================================
 // Implementation
 //=================================================================================================
-#if defined(BUF_IMPL)
+#if defined(MEM_IMPL)
 
 #include <string.h>
 
-#if !defined(BUF_MAX_ALIGNMENT)
-#define BUF_MAX_ALIGNMENT 16
+#if !defined(MEM_ALIGN_MAX)
+#define MEM_ALIGN_MAX 16
 #endif
 
-#if !defined(BUF_ASSERT)
+#if !defined(MEM_ASSERT)
 #include "assert.h"
-#define BUF_ASSERT assert
+#define MEM_ASSERT assert
 #endif
 
-#if !defined(BUF_ASSERT_MSG)
-#define BUF_ASSERT_MSG(cond, msg) BUF_ASSERT((cond) && (msg))
+#if !defined(MEM_ASSERT_MSG)
+#define MEM_ASSERT_MSG(cond, msg) MEM_ASSERT((cond) && (msg))
 #endif
 
 static void memCommit(MemArena *mem);
@@ -143,8 +148,8 @@ ceilPowerOf2_64(uint64_t v)
 size_t
 memAlignBackward(size_t addr, size_t alignment)
 {
-    BUF_ASSERT_MSG(alignment > 0, "Alignment must be > 0");
-    BUF_ASSERT_MSG(!(alignment & (alignment - 1)), "Alignment must be a power of 2");
+    MEM_ASSERT_MSG(alignment > 0, "Alignment must be > 0");
+    MEM_ASSERT_MSG(!(alignment & (alignment - 1)), "Alignment must be a power of 2");
     // 000010000 // example alignment
     // 000001111 // subtract 1
     // 111110000 // binary not
@@ -181,9 +186,9 @@ isLastAlloc(MemArena const *mem, uint8_t const *ptr, size_t size)
 void *
 memReallocEx(MemArena *mem, void *old_ptr, size_t old_size, size_t new_size, size_t alignment)
 {
-    BUF_ASSERT(mem);
-    BUF_ASSERT_MSG(old_ptr == 0 || old_size != 0, "Inconsistent old memory state");
-    BUF_ASSERT_MSG(new_size != 0 || old_ptr != 0, "Incoherent new memory request");
+    MEM_ASSERT(mem);
+    MEM_ASSERT_MSG(old_ptr == 0 || old_size != 0, "Inconsistent old memory state");
+    MEM_ASSERT_MSG(new_size != 0 || old_ptr != 0, "Incoherent new memory request");
 
     if (isLastAlloc(mem, old_ptr, old_size))
     {
@@ -220,21 +225,20 @@ memReallocEx(MemArena *mem, void *old_ptr, size_t old_size, size_t new_size, siz
 }
 
 bool
-bufRealloc(void **buf_ptr, size_t *cap_ptr, size_t req_cap, size_t item_size, MemArena *mem)
+memBufRealloc(void **buf_ptr, size_t *cap_ptr, size_t req_cap, size_t item_size, MemArena *mem)
 {
     size_t cur_cap = *cap_ptr;
     if (req_cap <= cur_cap) return true;
     if (!mem) return false;
 
     size_t new_capacity = ceilPowerOf2(req_cap);
-    BUF_ASSERT(new_capacity);
+    MEM_ASSERT(new_capacity);
 
     // TODO (Matteo): Improve?
     // Try to deduce a correct alignment from the item size withour requiring it (this allows
     // for a less cluttered API)
-    size_t item_align =
-        (item_size > BUF_MAX_ALIGNMENT) ? BUF_MAX_ALIGNMENT : ceilPowerOf2(item_size);
-    BUF_ASSERT(item_align <= BUF_MAX_ALIGNMENT);
+    size_t item_align = (item_size > MEM_ALIGN_MAX) ? MEM_ALIGN_MAX : ceilPowerOf2(item_size);
+    MEM_ASSERT(item_align <= MEM_ALIGN_MAX);
 
     void *new_buf =
         memReallocEx(mem, *buf_ptr, cur_cap * item_size, new_capacity * item_size, item_align);
