@@ -38,9 +38,14 @@
 
 //=== Dependencies ===//
 
-// Standard types are used in the API
+// Standard library-provided types are used in the API
+//
 // Define MEM_ASSERT to custom assert function if needed, otherwise the implementation uses
-// the standard library provided <assert.h>
+// the standard library-provided <assert.h>
+//
+// Define MEM_SET and MEM_COPY (either both of none of those!) to custom versions if needed,
+// otherwise the implementation try to use the compiler-provided, OS-provided, or
+// standard library-provided ones, in fallback order.
 #    include <stdbool.h>
 #    include <stddef.h>
 #    include <stdint.h>

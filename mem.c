@@ -1,16 +1,47 @@
 #include "mem.h"
 
-//=== Assertions ===//
+//=== Dependencies ===//
 
 #if !defined(MEM_ASSERT)
 #    include <assert.h>
 #    define MEM_ASSERT assert
 #endif
 
-//=== Type checks ===//
+#if defined(_WIN32)
+#    define MEM_WIN32
 
-_Static_assert(sizeof(size_t) == sizeof(uintptr_t), "Pointer size mismatch");
-_Static_assert(MEM_ALIGNOF(size_t) == MEM_ALIGNOF(uintptr_t), "Pointer alignment mismatch");
+#    if !defined(NOMINMAX)
+#        define NOMINMAX 1
+#    endif
+
+#    if !defined(VC_EXTRALEAN)
+#        define VC_EXTRALEAN 1
+#    endif
+
+#    if !defined(WIN32_LEAN_AND_MEAN)
+#        define WIN32_LEAN_AND_MEAN 1
+#    endif
+
+#    pragma warning(push)
+#    pragma warning(disable : 5105)
+#    include <Windows.h>
+#    pragma warning(pop)
+
+#endif
+
+#if !defined(MEM_SET)
+#    if defined(__has_builtin) && __has_builtin(__builtin_memset)
+#        define MEM_SET __builtin_memset
+#        define MEM_COPY __builtin_memcpy
+#    elif defined(MEM_WIN32)
+#        define MEM_SET FillMemory
+#        define MEM_COPY CopyMemory
+#    else
+#        include <memory.h>
+#        define MEM_SET memset
+#        define MEM_COPY memcpy
+#    endif
+#endif
 
 //=== Data definitions ===//
 
@@ -29,6 +60,12 @@ struct MemArena
     size_t len, cap, commit;
     uint32_t flags;
 };
+
+//=== Type checks ===//
+
+_Static_assert(sizeof(MemArena) <= MEM_PAGE_SIZE, "Allocator does not fit page size");
+_Static_assert(sizeof(size_t) == sizeof(uintptr_t), "Pointer size mismatch");
+_Static_assert(MEM_ALIGNOF(size_t) == MEM_ALIGNOF(uintptr_t), "Pointer alignment mismatch");
 
 //=== Internal utilities ===//
 
@@ -50,7 +87,7 @@ lastAlloc(MemArena *mem, MemBlock const *block)
 
 //=== Windows implementation ===//
 
-#if defined(WIN32)
+#if defined(MEM_WIN32)
 
 #    if !defined(NOMINMAX)
 #        define NOMINMAX 1
