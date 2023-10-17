@@ -17,7 +17,7 @@ main(void)
 {
     bool result;
 
-    MemArena *mem = memReserve(&(MemReserveOptions){
+    MemArena *mem = memReserve(&(MemArenaInfo){
         .total_size = MEM_GB(1),
     });
 

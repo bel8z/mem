@@ -114,7 +114,7 @@ typedef struct MemBlock
 // \endcode
 typedef struct MemArena MemArena;
 
-typedef struct MemReserveOptions
+typedef struct MemArenaInfo
 {
     // Total allocation size, including space required for the allocator data structure.
     // If initialized to 0, this value is deduced by /param available_size
@@ -128,9 +128,9 @@ typedef struct MemReserveOptions
     // Set this flag to avoid protection of unused memory (may improve performance is memFree and
     // memResize are called often).
     bool unsafe;
-} MemReserveOptions;
+} MemArenaInfo;
 
-MEM_API MemArena *memReserve(MemReserveOptions const *opts);
+MEM_API MemArena *memReserve(MemArenaInfo const *info);
 
 MEM_API void memRelease(MemArena *mem);
 
@@ -353,7 +353,7 @@ memRelease(MemArena *mem)
 }
 
 MemArena *
-memReserve(MemReserveOptions const *opts)
+memReserve(MemArenaInfo const *info)
 {
     // NOTE (Matteo): A single page is committed to store the allocator data structure. This is
     // a bit wasteful, but allows memory protection to work for all subsequent allocations
@@ -361,8 +361,8 @@ memReserve(MemReserveOptions const *opts)
 
     // NOTE (Matteo): If the total allocation size is not provided, it is deduced from the required
     // available size, plus the space required to store the allocator data structure
-    size_t total_size = opts->total_size;
-    size_t avail_size = opts->available_size;
+    size_t total_size = info->total_size;
+    size_t avail_size = info->available_size;
 
     if (!total_size)
     {
@@ -390,7 +390,7 @@ memReserve(MemReserveOptions const *opts)
     mem->cap = avail_size;
     mem->len = 0;
     mem->commit = 0;
-    mem->flags |= (MEM_FLAG_UNSAFE & boolMask(opts->unsafe));
+    mem->flags |= (MEM_FLAG_UNSAFE & boolMask(info->unsafe));
 
     return mem;
 }
@@ -511,5 +511,12 @@ memReallocEx(MemArena *mem,     //
 }
 
 #endif // MEM_IMPLEMENTATION
+
+//==================================================================================================
+
+// TODO (Matteo):
+// * Dynamic buffer API and example usage
+// * Fork/join allocators
+// * Naming review
 
 //==================================================================================================
