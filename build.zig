@@ -20,7 +20,6 @@ pub fn build(b: *std.Build) void {
         "-Werror", // Required otherwise ZIG ignores warnings
         "-Wall", "-Wextra", // Reasonable and standard
         "-Wpedantic", // Warn if non standarc C is used
-        
     };
 
     const exe = b.addExecutable(.{

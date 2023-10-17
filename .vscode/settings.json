@@ -1,6 +1,0 @@
-{
-    "files.associations": {
-        "*.toml": "ini",
-        "mem.h": "c"
-    }
-}

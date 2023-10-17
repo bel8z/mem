@@ -150,17 +150,49 @@ MEM_API bool memFree(MemArena *mem, MemBlock *block);
 // Query the memory still available in the arena
 MEM_API size_t memAvailable(MemArena *mem);
 
-//=== Array allocation utilities ===//
+//=== Dynamic buffer utilities ===//
 
-// TODO (Matteo): Cleanup array allocation API
+// Parameter bundle for memBufAllocEx, mainly for a compact function declaration and also to take
+// advantage of the C capability to take the address of a temporary
+typedef struct MemBufInfo
+{
+    size_t item_size;
+    size_t item_align;
+    size_t *curr_cap_ptr;
+    void *curr_buf;
+    size_t required_cap;
+    uint8_t grow_f;
+    bool strict_cap;
+} MemBufInfo;
 
-MEM_API void *memReallocEx(MemArena *mem, size_t item_size, size_t item_align, //
-                           void *old_ptr, size_t old_count, size_t new_count);
+// Ensure the buffer is allocated with at least the given capacity
+// May reallocate: if the operation succeeds a valid, possibly different, buffer pointer is returned
+// and the capacity update; otherwise NULL is returned and the previous allocation is left as is
+#    define memBufAlloc(T, mem, buf, req_cap, cap_ptr)       \
+        memBufAllocEx(mem, &(MemBufInfo){                    \
+                               .item_size = sizeof(T),       \
+                               .item_align = MEM_ALIGNOF(T), \
+                               .curr_buf = buf,              \
+                               .curr_cap_ptr = cap_ptr,      \
+                               .required_cap = req_cap,      \
+                           })
 
-#    define memArrayFree(mem, T, array, count) memArrayRealloc(mem, T, array, count, 0)
-#    define memArrayAlloc(mem, T, count) memArrayRealloc(mem, T, NULL, 0, count)
-#    define memArrayRealloc(mem, T, old_ptr, old_count, new_count) \
-        (T *)memReallocEx(mem, sizeof(T), MEM_ALIGNOF(T), old_ptr, old_count, new_count)
+// Ensure the buffer is allocated with stricly the given capacity
+// May reallocate: if the operation succeeds a valid, possibly different, buffer pointer is returned
+// and the capacity update; otherwise NULL is returned and the previous allocation is left as is
+#    define memBufAllocStrict(T, mem, buf, req_cap, cap_ptr) \
+        memBufAllocEx(mem, &(MemBufInfo){                    \
+                               .item_size = sizeof(T),       \
+                               .item_align = MEM_ALIGNOF(T), \
+                               .curr_buf = buf,              \
+                               .curr_cap_ptr = cap_ptr,      \
+                               .required_cap = req_cap,      \
+                           })
+
+#    define memBufFree(T, mem, buf, cap) \
+        memFree(mem, &(MemBlock){.ptr = (void *)(buf), .len = (cap) * sizeof(T)})
+
+MEM_API void *memBufAllocEx(MemArena *mem, MemBufInfo const *info);
 
 #endif // MEM_API
 
@@ -510,13 +542,72 @@ memReallocEx(MemArena *mem,     //
     return block.ptr;
 }
 
+void *
+memBufAllocEx(MemArena *mem, MemBufInfo const *info)
+{
+    MEM_ASSERT(mem);
+    MEM_ASSERT(info);
+    MEM_ASSERT(info->curr_cap_ptr);
+
+    size_t target_cap = info->required_cap;
+    size_t curr_cap = *info->curr_cap_ptr;
+
+    // NOTE (Matteo): Exit early if possible
+    if (target_cap == curr_cap) return info->curr_buf;
+
+    if (!info->strict_cap)
+    {
+        // TODO (Matteo): Is this a real case?
+        // NOTE (Matteo): In case a stricly lower capacity is required, we honor
+        // it by reallocating; otherwise we can leave it as is.
+        if (target_cap < curr_cap) return info->curr_buf;
+
+        uint8_t grow_f = info->grow_f;
+        if (!grow_f) grow_f = 2;
+
+        size_t next_cap = curr_cap;
+        if (!next_cap) next_cap = target_cap;
+
+        while (next_cap < target_cap)
+        {
+            next_cap *= grow_f;
+        }
+
+        target_cap = next_cap;
+    }
+
+    MEM_ASSERT(target_cap > curr_cap || info->strict_cap);
+
+    MemBlock old_block = {.ptr = info->curr_buf, .len = curr_cap * info->item_size};
+    size_t new_size = target_cap * info->item_size;
+
+    if (memResize(mem, &old_block, new_size))
+    {
+        *info->curr_cap_ptr = target_cap;
+        return old_block.ptr;
+    }
+
+    MemBlock new_block = memAlloc(mem, new_size, info->item_align);
+    if (new_block.ptr)
+    {
+        // NOTE (Matteo): Copy and free old data
+        MEM_COPY(new_block.ptr, old_block.ptr, old_block.len);
+        memFree(mem, &old_block);
+
+        *info->curr_cap_ptr = target_cap;
+        return new_block.ptr;
+    }
+
+    return NULL;
+}
+
 #endif // MEM_IMPLEMENTATION
 
 //==================================================================================================
 
 // TODO (Matteo):
-// * Dynamic buffer API and example usage
-// * Fork/join allocators
 // * Naming review
+// * More usage code, especially for dynamic buffers
+// * Fork/join allocators
 
 //==================================================================================================
