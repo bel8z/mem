@@ -51,11 +51,14 @@
 // custom versions of the memset and memcpy functions; otherwise we try to use the intrinsic
 // versions that the compiler may offer, falling back to the OS API (which in turn may fall back
 // to the C standard library).
+//      MEM_SET(ptr, val, len)
+//      MEM_COPY(dst, src, len)
 //
 // Almost the same happens for assertions, with the MEM_ASSERT macros; in this case though the
 // chosen fallback is the C standard <assert.h> header, because a) it is a debug faciliy,
 // and b) the implementation offered by Windows seems reasonable.
 // Note that we might switch to intrinsic traps in the future.
+//      MEM_ASSERT(x)
 //
 // All of the above applies for the implementation only, so those macros must be defined ONCE, along
 // the MEM_IMPLEMENTATION one.
@@ -175,21 +178,34 @@ MEM_API void *memReallocEx(MemArena *mem, size_t item_size, size_t item_align, /
 #        define MEM_HAS_BUILTIN (fn) false
 #    endif
 
+// NOTE (Matteo): Indirection required to expand macro arguments
+#    define MEM_STR(x) MEM_STR_INNER(x)
+#    define MEM_STR_INNER(x) #x
+
 // Windows
 // TODO (Matteo): Support other platforms
 #    if !defined(NOMINMAX)
 #        define NOMINMAX 1
 #    endif
+
 #    if !defined(VC_EXTRALEAN)
 #        define VC_EXTRALEAN 1
 #    endif
+
 #    if !defined(WIN32_LEAN_AND_MEAN)
 #        define WIN32_LEAN_AND_MEAN 1
 #    endif
-#    pragma warning(push)
-#    pragma warning(disable : 5105)
+
+#    if defined(_MSC_VER)
+#        pragma warning(push)
+#        pragma warning(disable : 5105)
+#    endif
+
 #    include <Windows.h>
-#    pragma warning(pop)
+
+#    if defined(_MSC_VER)
+#        pragma warning(pop)
+#    endif
 
 // Assertions
 #    if !defined(MEM_ASSERT)
@@ -197,16 +213,18 @@ MEM_API void *memReallocEx(MemArena *mem, size_t item_size, size_t item_align, /
 #        define MEM_ASSERT assert
 #    endif
 
-// MEM_SET
-#    if !defined(MEM_SET)
-#        if MEM_HAS_BUILTIN(__builtin_memset)
-#            define MEM_SET __builtin_memset
-#        else
-#            define MEM_SET FillMemory
-#        endif
+// MEM_SET, MEM_ZERO
+#    if defined(MEM_SET)
+#        define MEM_ZERO(ptr, len) MEM_SET(ptr, 0, len)
+#    elif MEM_HAS_BUILTIN(__builtin_memset)
+#        define MEM_SET __builtin_memset
+#        define MEM_ZERO(ptr, len) MEM_SET(ptr, 0, len)
+#    else
+#        define MEM_SET(ptr, val, len) FillMemory(ptr, len, val)
+#        define MEM_ZERO ZeroMemory
 #    endif
 
-// MEM_COPY
+// MEM_COPY: memcpy
 #    if !defined(MEM_COPY)
 #        if MEM_HAS_BUILTIN(__builtin_memcpy)
 #            define MEM_COPY __builtin_memcpy
@@ -290,7 +308,9 @@ decommit(MemBlock block)
     // NOTE (Matteo): Avoid syscalls for no-ops
     if (block.len)
     {
-#    pragma warning(suppress : 6250)
+#    if defined(_MSC_VER)
+#        pragma warning(suppress : 6250)
+#    endif
         // NOTE (Matteo): This warns about using MEM_RELEASE without MEM_DECOMMIT, which is exactly
         // what we want
         BOOL result = VirtualFree(block.ptr, block.len, MEM_DECOMMIT);
@@ -311,7 +331,7 @@ adjustCommited(MemArena *mem)
         // NOTE (Matteo): Freshly committed memory is cleared to zero by default; for consistency
         // all memory that is not decommitted (e.g. due to mismatched alignment) is cleared too.
         decommit((MemBlock){.ptr = mem->ptr + min_commit, .len = mem->commit - min_commit});
-        MEM_SET(mem->ptr + mem->len, min_commit - mem->len, 0);
+        MEM_ZERO(mem->ptr + mem->len, min_commit - mem->len);
     }
     else if (min_commit > mem->commit)
     {

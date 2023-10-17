@@ -15,7 +15,13 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const c_flags = .{};
+    const c_flags = .{
+        "-std=c11",
+        "-Werror", // Required otherwise ZIG ignores warnings
+        "-Wall", "-Wextra", // Reasonable and standard
+        "-Wpedantic", // Warn if non standarc C is used
+        
+    };
 
     const exe = b.addExecutable(.{
         .name = "test",
@@ -27,7 +33,6 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.addCSourceFile(.{ .file = .{ .path = "test/test.c" }, .flags = &c_flags });
-    exe.addIncludePath(.{ .path = "." });
     exe.linkLibC();
 
     // This declares intent for the executable to be installed into the
