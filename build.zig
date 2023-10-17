@@ -27,7 +27,6 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.addCSourceFile(.{ .file = .{ .path = "test/test.c" }, .flags = &c_flags });
-    exe.addCSourceFile(.{ .file = .{ .path = "mem.c" }, .flags = &c_flags });
     exe.addIncludePath(.{ .path = "." });
     exe.linkLibC();
 
