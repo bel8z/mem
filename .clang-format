@@ -25,7 +25,7 @@ AlwaysBreakAfterReturnType: TopLevelDefinitions
 #--------------
 
 IndentCaseLabels: true
-IndentPPDirectives: AfterHash
+IndentPPDirectives: BeforeHash
 
 #--------------
 # Alignment
