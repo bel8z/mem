@@ -34,14 +34,14 @@
 
 #if !defined(MEM_API)
 
-    // Since MEM_API must be defined, it acts as an include guard too
-    #if defined(__cplusplus)
-        #define MEM_ALIGNOF alignof
-        #define MEM_API extern "C"
-    #else
-        #define MEM_ALIGNOF _Alignof
-        #define MEM_API
-    #endif
+// Since MEM_API must be defined, it acts as an include guard too
+#if defined(__cplusplus)
+#define MEM_ALIGNOF alignof
+#define MEM_API extern "C"
+#else
+#define MEM_ALIGNOF _Alignof
+#define MEM_API
+#endif
 
 //=== Dependencies ===//
 
@@ -65,18 +65,18 @@
 // The interface relies on C standard types, which are pure definitions (so no runtime
 // dependencies), and is not configurable (sorry folks, it's 2023 and we should agree on something).
 
-    #include <stdbool.h>
-    #include <stddef.h>
-    #include <stdint.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
-    //=== Macros ===//
+//=== Macros ===//
 
-    // Utilities for explicit allocation sizes
-    #define MEM_KB(count) ((size_t)(count) * (size_t)(1024))
-    #define MEM_MB(count) MEM_KB(MEM_KB(count))
-    #define MEM_GB(count) MEM_KB(MEM_MB(count))
-    #define MEM_TB(count) MEM_KB(MEM_GB(count))
-    #define MEM_PB(count) MEM_KB(MEM_TB(count))
+// Utilities for explicit allocation sizes
+#define MEM_KB(count) ((size_t)(count) * (size_t)(1024))
+#define MEM_MB(count) MEM_KB(MEM_KB(count))
+#define MEM_GB(count) MEM_KB(MEM_MB(count))
+#define MEM_TB(count) MEM_KB(MEM_GB(count))
+#define MEM_PB(count) MEM_KB(MEM_TB(count))
 
 //=== Main API ===//
 
@@ -145,7 +145,7 @@ MEM_API bool memResize(MemArena *mem, MemBlock *block, size_t new_len);
 // Try to free the given memory block; since allocations are handed out in a linear fashion,
 // this operation may not succeed. In this case the block is leaked until the entire allocation
 // is cleared.
-MEM_API bool memFree(MemArena *mem, MemBlock *block);
+#define memFree(mem, block) memResize(mem, block, 0)
 
 // Query the memory still available in the arena
 MEM_API size_t memAvailable(MemArena *mem);
@@ -165,34 +165,34 @@ typedef struct MemBufInfo
     bool strict_cap;
 } MemBufInfo;
 
-    // Ensure the buffer is allocated with at least the given capacity
-    // May reallocate: if the operation succeeds a valid, possibly different, buffer pointer is
-    // returned and the capacity update; otherwise NULL is returned and the previous allocation is
-    // left as is
-    #define memBufAlloc(T, mem, buf, req_cap, cap_ptr)       \
-        memBufAllocEx(mem, &(MemBufInfo){                    \
-                               .item_size = sizeof(T),       \
-                               .item_align = MEM_ALIGNOF(T), \
-                               .curr_buf = buf,              \
-                               .curr_cap_ptr = cap_ptr,      \
-                               .required_cap = req_cap,      \
-                           })
+// Ensure the buffer is allocated with at least the given capacity
+// May reallocate: if the operation succeeds a valid, possibly different, buffer pointer is
+// returned and the capacity update; otherwise NULL is returned and the previous allocation is
+// left as is
+#define memBufAlloc(T, mem, buf, req_cap, cap_ptr)       \
+    memBufAllocEx(mem, &(MemBufInfo){                    \
+                           .item_size = sizeof(T),       \
+                           .item_align = MEM_ALIGNOF(T), \
+                           .curr_buf = buf,              \
+                           .curr_cap_ptr = cap_ptr,      \
+                           .required_cap = req_cap,      \
+                       })
 
-    // Ensure the buffer is allocated with stricly the given capacity
-    // May reallocate: if the operation succeeds a valid, possibly different, buffer pointer is
-    // returned and the capacity update; otherwise NULL is returned and the previous allocation is
-    // left as is
-    #define memBufAllocStrict(T, mem, buf, req_cap, cap_ptr) \
-        memBufAllocEx(mem, &(MemBufInfo){                    \
-                               .item_size = sizeof(T),       \
-                               .item_align = MEM_ALIGNOF(T), \
-                               .curr_buf = buf,              \
-                               .curr_cap_ptr = cap_ptr,      \
-                               .required_cap = req_cap,      \
-                           })
+// Ensure the buffer is allocated with stricly the given capacity
+// May reallocate: if the operation succeeds a valid, possibly different, buffer pointer is
+// returned and the capacity update; otherwise NULL is returned and the previous allocation is
+// left as is
+#define memBufAllocStrict(T, mem, buf, req_cap, cap_ptr) \
+    memBufAllocEx(mem, &(MemBufInfo){                    \
+                           .item_size = sizeof(T),       \
+                           .item_align = MEM_ALIGNOF(T), \
+                           .curr_buf = buf,              \
+                           .curr_cap_ptr = cap_ptr,      \
+                           .required_cap = req_cap,      \
+                       })
 
-    #define memBufFree(T, mem, buf, cap) \
-        memFree(mem, &(MemBlock){.ptr = (void *)(buf), .len = (cap) * sizeof(T)})
+#define memBufFree(T, mem, buf, cap) \
+    memResize(mem, &(MemBlock){.ptr = (void *)(buf), .len = (cap) * sizeof(T)}, 0)
 
 MEM_API void *memBufAllocEx(MemArena *mem, MemBufInfo const *info);
 
@@ -206,66 +206,66 @@ MEM_API void *memBufAllocEx(MemArena *mem, MemBufInfo const *info);
 
 //=== Dependencies ===//
 
-    #if defined(__has_builtin)
-        #define MEM_HAS_BUILTIN __has_builtin
-    #else
-        #define MEM_HAS_BUILTIN(fn) false
-    #endif
+#if defined(__has_builtin)
+#define MEM_HAS_BUILTIN __has_builtin
+#else
+#define MEM_HAS_BUILTIN(fn) false
+#endif
 
-    // NOTE (Matteo): Indirection required to expand macro arguments
-    #define MEM_STR(x) MEM_STR_INNER(x)
-    #define MEM_STR_INNER(x) #x
+// NOTE (Matteo): Indirection required to expand macro arguments
+#define MEM_STR(x) MEM_STR_INNER(x)
+#define MEM_STR_INNER(x) #x
 
-    // Windows
-    // TODO (Matteo): Support other platforms
-    #if !defined(NOMINMAX)
-        #define NOMINMAX 1
-    #endif
+// Windows
+// TODO (Matteo): Support other platforms
+#if !defined(NOMINMAX)
+#define NOMINMAX 1
+#endif
 
-    #if !defined(VC_EXTRALEAN)
-        #define VC_EXTRALEAN 1
-    #endif
+#if !defined(VC_EXTRALEAN)
+#define VC_EXTRALEAN 1
+#endif
 
-    #if !defined(WIN32_LEAN_AND_MEAN)
-        #define WIN32_LEAN_AND_MEAN 1
-    #endif
+#if !defined(WIN32_LEAN_AND_MEAN)
+#define WIN32_LEAN_AND_MEAN 1
+#endif
 
-    #if defined(_MSC_VER)
-        #pragma warning(push)
-        #pragma warning(disable : 5105)
-    #endif
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 5105)
+#endif
 
-    #include <Windows.h>
+#include <Windows.h>
 
-    #if defined(_MSC_VER)
-        #pragma warning(pop)
-    #endif
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
-    // Assertions
-    #if !defined(MEM_ASSERT)
-        #include <assert.h>
-        #define MEM_ASSERT assert
-    #endif
+// Assertions
+#if !defined(MEM_ASSERT)
+#include <assert.h>
+#define MEM_ASSERT assert
+#endif
 
-    // MEM_SET, MEM_ZERO
-    #if defined(MEM_SET)
-        #define MEM_ZERO(ptr, len) MEM_SET(ptr, 0, len)
-    #elif MEM_HAS_BUILTIN(__builtin_memset)
-        #define MEM_SET __builtin_memset
-        #define MEM_ZERO(ptr, len) MEM_SET(ptr, 0, len)
-    #else
-        #define MEM_SET(ptr, val, len) FillMemory(ptr, len, val)
-        #define MEM_ZERO ZeroMemory
-    #endif
+// MEM_SET, MEM_ZERO
+#if defined(MEM_SET)
+#define MEM_ZERO(ptr, len) MEM_SET(ptr, 0, len)
+#elif MEM_HAS_BUILTIN(__builtin_memset)
+#define MEM_SET __builtin_memset
+#define MEM_ZERO(ptr, len) MEM_SET(ptr, 0, len)
+#else
+#define MEM_SET(ptr, val, len) FillMemory(ptr, len, val)
+#define MEM_ZERO ZeroMemory
+#endif
 
-    // MEM_COPY: memcpy
-    #if !defined(MEM_COPY)
-        #if MEM_HAS_BUILTIN(__builtin_memcpy)
-            #define MEM_COPY __builtin_memcpy
-        #else
-            #define MEM_COPY CopyMemory
-        #endif
-    #endif
+// MEM_COPY: memcpy
+#if !defined(MEM_COPY)
+#if MEM_HAS_BUILTIN(__builtin_memcpy)
+#define MEM_COPY __builtin_memcpy
+#else
+#define MEM_COPY CopyMemory
+#endif
+#endif
 
 //=== Data definitions ===//
 
@@ -342,9 +342,9 @@ decommit(MemBlock block)
     // NOTE (Matteo): Avoid syscalls for no-ops
     if (block.len)
     {
-    #if defined(_MSC_VER)
-        #pragma warning(suppress : 6250)
-    #endif
+#if defined(_MSC_VER)
+#pragma warning(suppress : 6250)
+#endif
         // NOTE (Matteo): This warns about using MEM_RELEASE without MEM_DECOMMIT, which is exactly
         // what we want
         BOOL result = VirtualFree(block.ptr, block.len, MEM_DECOMMIT);
@@ -464,23 +464,6 @@ memAlloc(MemArena *mem, size_t len, size_t alignment)
 }
 
 bool
-memFree(MemArena *mem, MemBlock *block)
-{
-    MEM_ASSERT(mem);
-
-    if (!lastAlloc(mem, block)) return false;
-
-    MEM_ASSERT(block->len && block->len < mem->cap);
-
-    mem->len -= block->len;
-    adjustCommited(mem);
-
-    block->ptr = NULL;
-    block->len = 0;
-    return true;
-}
-
-bool
 memResize(MemArena *mem, MemBlock *block, size_t new_len)
 {
     MEM_ASSERT(mem);
@@ -520,28 +503,6 @@ memAvailable(MemArena *mem)
 {
     MEM_ASSERT(mem);
     return mem->cap - mem->len;
-}
-
-void *
-memReallocEx(MemArena *mem,     //
-             size_t item_size,  //
-             size_t item_align, //
-             void *old_ptr,     //
-             size_t old_count,  //
-             size_t new_count)
-{
-    MemBlock block = {.ptr = old_ptr, .len = old_count * item_size};
-    size_t new_len = new_count * item_size;
-
-    if (!memResize(mem, &block, new_len))
-    {
-        memFree(mem, &block);
-        block = memAlloc(mem, new_len, item_align);
-    }
-
-    MEM_ASSERT(block.len || !block.ptr);
-
-    return block.ptr;
 }
 
 void *
