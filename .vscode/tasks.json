@@ -14,7 +14,7 @@
             "group": {
                 "kind": "build",
             },
-            "problemMatcher": "$zig",
+            "problemMatcher": "$gcc",
             "presentation": {
                 "reveal": "silent",
                 "revealProblems": "onProblem",
@@ -34,7 +34,7 @@
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": "$zig",
+            "problemMatcher": "$gcc",
             "presentation": {
                 "reveal": "silent",
                 "revealProblems": "onProblem",
@@ -51,7 +51,7 @@
             "group": {
                 "kind": "build",
             },
-            "problemMatcher": "$zig",
+            "problemMatcher": "$gcc",
             "presentation": {
                 "reveal": "silent",
                 "revealProblems": "onProblem",
@@ -68,7 +68,7 @@
             "group": {
                 "kind": "build",
             },
-            "problemMatcher": "$zig",
+            "problemMatcher": "$gcc",
             "presentation": {
                 "reveal": "silent",
                 "revealProblems": "onProblem",
