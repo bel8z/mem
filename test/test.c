@@ -43,11 +43,11 @@ main(void)
     });
 
     MemBlock block = memAlloc(mem, 1024, 8);
-    assert(block.ptr);
+    MEM_ASSERT(block.ptr);
 
     result = memFree(mem, &block);
-    assert(result);
-    assert(!block.ptr);
+    MEM_ASSERT(result);
+    MEM_ASSERT(!block.ptr);
 
     Buf buf = {.mem = mem};
     for (uint32_t i = 0; i < 10; ++i)
@@ -55,7 +55,7 @@ main(void)
         bufPush(&buf, i);
     }
 
-    assert(bufFree(&buf));
+    MEM_ASSERT(bufFree(&buf));
 
     return 0;
 }
