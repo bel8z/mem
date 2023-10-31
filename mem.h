@@ -130,10 +130,16 @@ typedef struct MemArenaInfo
     bool unsafe;
 } MemArenaInfo;
 
+// Reserve virtual memory to allocate from, with some space reserved to the allocator data structure
+// itself. This initial reservation in customisable, see MemArenaInfo for details.
 MEM_API MemArena *memReserve(MemArenaInfo const *info);
 
+// Release the whole virtual memory block, rendering the allocator unusable.
 MEM_API void memRelease(MemArena *mem);
 
+// Clears the total allocated memory all at once. If the safety features are enabled, the memory is
+// also decommited in order to trigger access violations on use. The allocator is reset and still
+// usable for further allocations.
 MEM_API void memClear(MemArena *mem);
 
 // Allocate a block of memory with the given size and alignment
@@ -150,9 +156,18 @@ MEM_API bool memResize(MemArena *mem, MemBlock *block, size_t new_len);
 // Query the memory still available in the arena
 MEM_API size_t memAvailable(MemArena *mem);
 
+// Allocate a block of memory to store a struct of the given type and return
+// a direct pointer to it (instead of the raw memory block)
+#define memAllocStruct(mem, T) (T *)(memAlloc(mem, sizeof(T), MEM_ALIGNOF(T)).ptr)
+
+// Try to free the memory block allocated for the pointed struct. Type information
+// not required because the size is inferred from the pointer.
+#define memFreeStruct(mem, item_ptr) \
+    memResize(mem, &(MemBlock){.ptr = (void *)(item_ptr), .len = sizeof(*ptr)}, 0)
+
 //=== Dynamic buffer utilities ===//
 
-// Parameter bundle for memBufAllocEx, mainly for a compact function declaration and also to take
+// Parameter bundle for memReallocBufEx, mainly for a compact function declaration and also to take
 // advantage of the C capability to take the address of a temporary
 typedef struct MemBufInfo
 {
@@ -169,32 +184,36 @@ typedef struct MemBufInfo
 // May reallocate: if the operation succeeds a valid, possibly different, buffer pointer is
 // returned and the capacity update; otherwise NULL is returned and the previous allocation is
 // left as is
-#define memBufAlloc(T, mem, buf, req_cap, cap_ptr)       \
-    memBufAllocEx(mem, &(MemBufInfo){                    \
-                           .item_size = sizeof(T),       \
-                           .item_align = MEM_ALIGNOF(T), \
-                           .curr_buf = buf,              \
-                           .curr_cap_ptr = cap_ptr,      \
-                           .required_cap = req_cap,      \
-                       })
+#define memReallocBuf(mem, T, buf, req_cap, cap_ptr)       \
+    memReallocBufEx(mem, &(MemBufInfo){                    \
+                             .item_size = sizeof(T),       \
+                             .item_align = MEM_ALIGNOF(T), \
+                             .curr_buf = buf,              \
+                             .curr_cap_ptr = cap_ptr,      \
+                             .required_cap = req_cap,      \
+                         })
 
 // Ensure the buffer is allocated with stricly the given capacity
 // May reallocate: if the operation succeeds a valid, possibly different, buffer pointer is
 // returned and the capacity update; otherwise NULL is returned and the previous allocation is
 // left as is
-#define memBufAllocStrict(T, mem, buf, req_cap, cap_ptr) \
-    memBufAllocEx(mem, &(MemBufInfo){                    \
-                           .item_size = sizeof(T),       \
-                           .item_align = MEM_ALIGNOF(T), \
-                           .curr_buf = buf,              \
-                           .curr_cap_ptr = cap_ptr,      \
-                           .required_cap = req_cap,      \
-                       })
+#define memReallocBufStrict(mem, T, buf, req_cap, cap_ptr) \
+    memReallocBufEx(mem, &(MemBufInfo){                    \
+                             .item_size = sizeof(T),       \
+                             .item_align = MEM_ALIGNOF(T), \
+                             .curr_buf = buf,              \
+                             .curr_cap_ptr = cap_ptr,      \
+                             .required_cap = req_cap,      \
+                         })
 
-#define memBufFree(T, mem, buf, cap) \
+// Try to free the given buffer; since allocations are handed out in a linear fashion,
+// this operation may not succeed. In this case the corresponding memory block is leaked until the
+// entire allocation is cleared.
+#define memFreeBuf(mem, T, buf, cap) \
     memResize(mem, &(MemBlock){.ptr = (void *)(buf), .len = (cap) * sizeof(T)}, 0)
 
-MEM_API void *memBufAllocEx(MemArena *mem, MemBufInfo const *info);
+// Actual implementation of the buffer (re)allocation functionality
+MEM_API void *memReallocBufEx(MemArena *mem, MemBufInfo const *info);
 
 #endif // MEM_API
 
@@ -506,7 +525,7 @@ memAvailable(MemArena *mem)
 }
 
 void *
-memBufAllocEx(MemArena *mem, MemBufInfo const *info)
+memReallocBufEx(MemArena *mem, MemBufInfo const *info)
 {
     MEM_ASSERT(mem);
     MEM_ASSERT(info);

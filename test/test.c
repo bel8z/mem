@@ -16,14 +16,14 @@ typedef struct Buf
 void
 bufPush(Buf *buf, uint32_t value)
 {
-    buf->ptr = memBufAlloc(uint32_t, buf->mem, buf->ptr, buf->len + 1, &buf->cap);
+    buf->ptr = memReallocBuf(buf->mem, uint32_t, buf->ptr, buf->len + 1, &buf->cap);
     buf->ptr[buf->len++] = value;
 }
 
 bool
 bufFree(Buf *buf)
 {
-    if (memBufFree(uint32_t, buf->mem, buf->ptr, buf->cap))
+    if (memFreeBuf(buf->mem, uint32_t, buf->ptr, buf->cap))
     {
         buf->len = buf->cap = 0;
         buf->ptr = NULL;
